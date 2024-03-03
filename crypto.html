@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html>
+<!--
+    Copyright (c) 2023 Social Commerce Engine Inc. All rights reserved.
+
+    This HTML document contains code developed by Social Commerce Engine Inc
+    and/or its developers, and is protected by copyright law.
+    Any unauthorized use, reproduction, modification or distribution
+    of this code is strictly prohibited.
+
+    Social Commerce Engine Inc and its developers are not liable for any loss
+    or damage caused by the use of this code, and assume no
+    responsibility for any errors or omissions in the content of this
+    document.
+
+    For inquiries regarding licensing, distribution or support of this
+    code, please contact support@socialstore.app
+-->
+
+<script
+    src="https://cdn.jsdelivr.net/gh/yngfoxx/web-crypto-hooks/subtle/ecdsa.js"
+></script>
+
+<script>
+var cert;
+
+(async () => {
+    /**
+     * @typedef MessagePayload
+     * @type {object}
+     * @property {string} id
+     * @property {string} data
+     * @property {string} hash
+     * @property {string} signature
+    */
+
+    /**
+     * @typedef MessageObject
+     * @type {object}
+     * @property {'INIT' | 'HASH' | 'VERIFY'} action
+     * @property {MessagePayload} payload
+     */
+
+    /**
+     * @typedef SessionData
+     * @type {object}
+     * @property {string} publicKey
+     */
+    
+    /**
+     * @typedef HashedData
+     * @type {object}
+     * @property {string} id
+     * @property {string} hash
+     * @property {string} signature
+     */
+
+    /**
+     * @typedef VerifyHashData
+     * @type {object}
+     * @property {string} id
+     * @property {boolean} valid
+     */
+
+    /**
+     * @typedef CertManagerSessionMessage
+     * @type {object}
+     * @property {'session'} type
+     * @property {SessionData} data
+     */
+   
+    /**
+     * @typedef CertManagerHashMessage
+     * @type {object}
+     * @property {'hash'} type
+     * @property {HashedData} data
+     */
+    
+    /**
+     * @typedef CertManagerVerifyMessage
+     * @type {object}
+     * @property {'verify'} type
+     * @property {VerifyHashData} data
+     */
+    
+    /**
+     * @typedef {(
+     *  | CertManagerSessionMessage
+     *  | CertManagerHashMessage
+     *  | CertManagerVerifyMessage
+     * )} CertManagerMessage
+     */
+
+    const currentWindow = 'ReactNativeWebView' in window ?
+        window.ReactNativeWebView :
+        window
+
+    if ('subtle' in window.crypto === false) {
+        currentWindow.postMessage(JSON.stringify({
+            message: 'not-supported',
+        }))
+        return;
+    }
+
+    /**
+     * ? ECDSA Certificate Manager
+     * @param {{data: string}} msg
+     */
+    const messageHandler = async msg => {
+
+        if (!msg || !msg?.data) return;
+
+        /**
+         * @type {MessageObject}
+         */
+        const messagePayload = JSON.parse(msg.data)
+        
+        const {
+            action,
+            payload,
+        } = messagePayload;
+
+        switch (action) {
+        case 'INIT':
+            cert = await useECDSA()
+            // Export public key in IEEE P1363 format
+            const pub = cert.tmpKeys.publicKey
+            crypto.subtle.exportKey('raw', pub).then(pbk => {
+                /** @type {CertManagerSessionMessage} */
+                const v = {
+                    type: 'session',
+                    data: {
+                        publicKey: cert.buf2hex(new Uint8Array(pbk).buffer)
+                    }
+                }
+                currentWindow.postMessage(JSON.stringify(v))
+            }).catch(alert)
+            break;
+
+        case 'HASH':
+            const hash = cert.buf2hex(cert.hash(payload.data).buffer)
+            cert.sign(new Uint8Array(cert.hex2buf(hash))).then(sig => {
+                /** @type {CertManagerHashMessage} */
+                const v = {
+                    type: 'hash',
+                    data: {
+                        hash,
+                        id: payload.id,
+                        signature: cert.buf2hex(new Uint8Array(sig).buffer)
+                    }
+                }
+                currentWindow.postMessage(JSON.stringify(v))
+            }).catch(alert)
+            break;
+
+        case 'VERIFY':
+            cert.verify(
+                new Uint8Array(cert.hex2buf(payload.hash)), 
+                new Uint8Array(cert.hex2buf(payload.signature))
+            ).then(valid => {
+                /** @type {CertManagerVerifyMessage} */
+                const v = {
+                    type: 'verify',
+                    data: {
+                        valid,
+                        id: payload.id,
+                    }
+                }
+                currentWindow.postMessage(JSON.stringify(v))
+            }).catch(alert)
+            break;
+        }
+    }
+
+    window.addEventListener('message', messageHandler)
+})()
+</script>
+</html>
