@@ -1,9 +1,9 @@
 <!DOCTYPE html>
 <html>
 <!--
-    Copyright (c) 2023 Social Commerce Engine Inc. All rights reserved.
+    Copyright (c) 2025 Social Commerce Engine Inc. All rights reserved.
 
-    This HTML document contains code developed by Social Commerce Engine Inc
+    This document contains code developed by Social Commerce Engine Inc
     and/or its developers, and is protected by copyright law.
     Any unauthorized use, reproduction, modification or distribution
     of this code is strictly prohibited.
@@ -32,12 +32,15 @@ var cert;
      * @property {string} data
      * @property {string} hash
      * @property {string} signature
+     * @property {string} ivHex
+     * @property {string} cipher
+     * @property {string} ephemeralKey
     */
 
     /**
      * @typedef MessageObject
      * @type {object}
-     * @property {'INIT' | 'HASH' | 'VERIFY'} action
+     * @property {'INIT' | 'HASH' | 'VERIFY' | 'DECRYPT'} action
      * @property {MessagePayload} payload
      */
 
@@ -60,6 +63,13 @@ var cert;
      * @type {object}
      * @property {string} id
      * @property {boolean} valid
+     */
+    
+    /**
+     * @typedef DecryptCipherData
+     * @type {object}
+     * @property {string} id
+     * @property {string} plaintext
      */
 
     /**
@@ -84,10 +94,18 @@ var cert;
      */
     
     /**
+     * @typedef CertManagerDecryptMessage
+     * @type {object}
+     * @property {'decrypt'} type
+     * @property {DecryptCipherData} data
+     */
+    
+    /**
      * @typedef {(
      *  | CertManagerSessionMessage
      *  | CertManagerHashMessage
      *  | CertManagerVerifyMessage
+     *  | CertManagerDecryptMessage
      * )} CertManagerMessage
      */
 
@@ -163,6 +181,24 @@ var cert;
                     type: 'verify',
                     data: {
                         valid,
+                        id: payload.id,
+                    }
+                }
+                currentWindow.postMessage(JSON.stringify(v))
+            }).catch(alert)
+            break;
+                
+        case 'DECRYPT':
+            cert.decrypt(
+                payload.cipher,
+                payload.ephemeralKey,
+                payload.ivHex,
+            ).then(plainText => {
+                /** @type {CertManagerDecryptMessage} */
+                const v = {
+                    type: 'decrypt',
+                    data: {
+                        plainText,
                         id: payload.id,
                     }
                 }
